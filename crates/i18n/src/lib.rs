@@ -2,8 +2,8 @@
 //!
 //! Every string shown in the GUI is looked up by a dotted key such as
 //! `"run.start"`. The tables for all supported languages are compiled into the
-//! executable from `i18n/<code>.json`, so the program stays a single
-//! self-contained `.exe`.
+//! executable from `locales/<code>.json` in this crate, so the program stays a
+//! single self-contained `.exe`.
 //!
 //! # Overriding translations
 //!
@@ -28,9 +28,9 @@ use std::collections::HashMap;
 use std::path::Path;
 
 /// Embedded English table (the reference set of keys).
-const EN_JSON: &str = include_str!("../i18n/en.json");
+const EN_JSON: &str = include_str!("../locales/en.json");
 /// Embedded Japanese table.
-const JA_JSON: &str = include_str!("../i18n/ja.json");
+const JA_JSON: &str = include_str!("../locales/ja.json");
 
 /// A language the user interface can be displayed in.
 ///
@@ -47,21 +47,21 @@ pub enum Language {
 
 impl Language {
     /// Every supported language, in display order.
-    pub const ALL: [Language; 2] = [Language::English, Language::Japanese];
+    pub const ALL: [Self; 2] = [Self::English, Self::Japanese];
 
     /// File-name code of the language, e.g. `"en"` for `i18n/en.json`.
-    pub fn code(self) -> &'static str {
+    pub const fn code(self) -> &'static str {
         match self {
-            Language::English => "en",
-            Language::Japanese => "ja",
+            Self::English => "en",
+            Self::Japanese => "ja",
         }
     }
 
     /// Translation JSON compiled into the executable for this language.
-    fn embedded(self) -> &'static str {
+    const fn embedded(self) -> &'static str {
         match self {
-            Language::English => EN_JSON,
-            Language::Japanese => JA_JSON,
+            Self::English => EN_JSON,
+            Self::Japanese => JA_JSON,
         }
     }
 }
@@ -92,9 +92,9 @@ impl Translations {
                     .unwrap_or_else(|e| panic!("embedded {}.json is invalid: {e}", lang.code()));
                 if let Some(dir) = override_dir {
                     let path = dir.join(format!("{}.json", lang.code()));
-                    let extra = std::fs::read_to_string(path)
-                        .ok()
-                        .and_then(|text| serde_json::from_str::<HashMap<String, String>>(&text).ok());
+                    let extra = std::fs::read_to_string(path).ok().and_then(|text| {
+                        serde_json::from_str::<HashMap<String, String>>(&text).ok()
+                    });
                     if let Some(extra) = extra {
                         table.extend(extra);
                     }
@@ -116,8 +116,11 @@ impl Translations {
     }
 
     /// Creates a translator bound to `lang`.
-    pub fn tr(&self, lang: Language) -> Tr<'_> {
-        Tr { translations: self, lang }
+    pub const fn tr(&self, lang: Language) -> Tr<'_> {
+        Tr {
+            translations: self,
+            lang,
+        }
     }
 }
 
@@ -212,8 +215,11 @@ pub struct Message {
 
 impl Message {
     /// Creates a message without arguments.
-    pub fn new(key: &'static str) -> Self {
-        Self { key, args: Vec::new() }
+    pub const fn new(key: &'static str) -> Self {
+        Self {
+            key,
+            args: Vec::new(),
+        }
     }
 
     /// Adds a literal text argument.
@@ -229,7 +235,7 @@ impl Message {
     }
 
     /// Adds an argument that is a nested message.
-    pub fn msg(mut self, name: &'static str, inner: Message) -> Self {
+    pub fn msg(mut self, name: &'static str, inner: Self) -> Self {
         self.args.push((name, Arg::Msg(Box::new(inner))));
         self
     }
@@ -251,7 +257,12 @@ mod tests {
     fn tables_have_the_same_keys() {
         let en = keys(EN_JSON);
         for lang in Language::ALL {
-            assert_eq!(keys(lang.embedded()), en, "key mismatch in {}.json", lang.code());
+            assert_eq!(
+                keys(lang.embedded()),
+                en,
+                "key mismatch in {}.json",
+                lang.code()
+            );
         }
     }
 
@@ -259,7 +270,10 @@ mod tests {
     fn placeholders_are_filled() {
         let t = Translations::load(None);
         let tr = t.tr(Language::English);
-        assert_eq!(tr.fmt("turbo.selected", &[("buttons", "A+B".into())]), "Selected: A+B");
+        assert_eq!(
+            tr.fmt("turbo.selected", &[("buttons", "A+B".into())]),
+            "Selected: A+B"
+        );
         let m = Message::new("log.stopped").key("feature", "feature.turbo");
         assert_eq!(tr.msg(&m), "Turbo stopped");
         assert_eq!(t.tr(Language::Japanese).msg(&m), "連打 停止");

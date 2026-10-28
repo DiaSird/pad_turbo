@@ -10,10 +10,15 @@
 //!   driver itself must be installed.
 //! * [`Output::Keyboard`] — injects key presses with `SendInput`, using
 //!   hardware scan codes so that DirectInput/raw-input games also accept them.
-//!   The mapping is fixed in [`KEYMAP`].
+//!   The mapping is fixed in [`KEYMAP`]. Keys go to the focused window, or,
+//!   when a target executable is set, are posted to that program's windows
+//!   so it can be driven in the background (see [`target`]).
 
-use crate::i18n::Message;
-use crate::pad::{self, PadState};
+pub mod target;
+
+use i18n::Message;
+use input::pad::{self, PadState};
+use target::WindowTarget;
 use vigem_client::{Client, TargetId, XButtons, XGamepad, Xbox360Wired};
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::*;
 
@@ -59,6 +64,8 @@ pub enum Output {
     Keyboard {
         /// Logical bits whose keys are currently pressed.
         held: u32,
+        /// Program the keys are posted to; `None` sends to the focused window.
+        target: Option<WindowTarget>,
     },
 }
 
@@ -76,18 +83,60 @@ impl Output {
         let client = Client::connect().map_err(|e| err("output.error.connect", e))?;
         let mut target = Xbox360Wired::new(client, TargetId::XBOX360_WIRED);
         target.plugin().map_err(|e| err("output.error.plugin", e))?;
-        target.wait_ready().map_err(|e| err("output.error.ready", e))?;
-        Ok(Output::ViGEm(target))
+        target
+            .wait_ready()
+            .map_err(|e| err("output.error.ready", e))?;
+        Ok(Self::ViGEm(target))
     }
 
     /// Creates a keyboard output with no keys held.
-    pub fn keyboard() -> Self {
-        Output::Keyboard { held: 0 }
+    pub const fn keyboard() -> Self {
+        Self::Keyboard {
+            held: 0,
+            target: None,
+        }
     }
 
     /// Whether this is the virtual-controller output.
-    pub fn is_vigem(&self) -> bool {
-        matches!(self, Output::ViGEm(_))
+    pub const fn is_vigem(&self) -> bool {
+        matches!(self, Self::ViGEm(_))
+    }
+
+    /// Executable name and process id the keyboard output posts to, if any
+    /// (see [`WindowTarget::spec`]).
+    pub fn target_spec(&self) -> Option<(&str, Option<u32>)> {
+        match self {
+            Self::Keyboard {
+                target: Some(t), ..
+            } => Some(t.spec()),
+            _ => None,
+        }
+    }
+
+    /// Processes and window count of the target (see
+    /// [`WindowTarget::status`]), or `None` when keys go to the focused
+    /// window.
+    pub fn target_status(&mut self) -> Option<(&[u32], usize)> {
+        match self {
+            Self::Keyboard {
+                target: Some(t), ..
+            } => Some(t.status()),
+            _ => None,
+        }
+    }
+
+    /// Redirects keyboard output to the windows of `spec` (executable name and
+    /// optional process id), or back to the focused window with `None`. Keys
+    /// held on the old destination are released first. Does nothing for the
+    /// virtual controller, which every program sees.
+    pub fn set_target(&mut self, spec: Option<(&str, Option<u32>)>) {
+        if self.is_vigem() {
+            return;
+        }
+        self.send(&PadState::default());
+        if let Self::Keyboard { target, .. } = self {
+            *target = spec.map(|(exe, pid)| WindowTarget::new(exe, pid));
+        }
     }
 
     /// Delivers `s` to the device.
@@ -98,7 +147,7 @@ impl Output {
     /// driver are ignored: a dropped report is corrected by the next tick.
     pub fn send(&mut self, s: &PadState) {
         match self {
-            Output::ViGEm(target) => {
+            Self::ViGEm(target) => {
                 let _ = target.update(&XGamepad {
                     buttons: XButtons { raw: s.buttons },
                     left_trigger: s.lt,
@@ -109,12 +158,16 @@ impl Output {
                     thumb_ry: s.ry,
                 });
             }
-            Output::Keyboard { held } => {
+            Self::Keyboard { held, target } => {
                 let m = s.mask();
                 let diff = m ^ *held;
                 for &(bit, vk, _, _) in KEYMAP.iter() {
                     if diff & bit != 0 {
-                        send_key(vk, m & bit != 0);
+                        let down = m & bit != 0;
+                        match target {
+                            Some(t) => t.post_key(vk, down, is_extended(vk)),
+                            None => send_key(vk, down),
+                        }
                     }
                 }
                 *held = m;
@@ -128,24 +181,29 @@ impl Output {
     /// unplugs the virtual controller if there is one.
     pub fn shutdown(mut self) {
         self.send(&PadState::default());
-        if let Output::ViGEm(mut target) = self {
+        if let Self::ViGEm(mut target) = self {
             let _ = target.unplug();
         }
     }
+}
+
+/// Whether `vk` is a navigation key (arrows, Home/End, PageUp/PageDown,
+/// Insert/Delete) on the extended scan-code page.
+const fn is_extended(vk: u16) -> bool {
+    matches!(vk, 0x21..=0x28 | 0x2D | 0x2E)
 }
 
 /// Presses (`down`) or releases a key identified by virtual-key code `vk`.
 ///
 /// The key is sent as a hardware scan code (`KEYEVENTF_SCANCODE`) because many
 /// games read raw scan codes and ignore virtual-key-only events. Navigation
-/// keys (arrows, Home/End, PageUp/PageDown, Insert/Delete) live on the extended
-/// scan-code page and get `KEYEVENTF_EXTENDEDKEY`.
+/// keys ([`is_extended`]) get `KEYEVENTF_EXTENDEDKEY`.
 fn send_key(vk: u16, down: bool) {
     let mut flags = KEYEVENTF_SCANCODE;
     if !down {
         flags |= KEYEVENTF_KEYUP;
     }
-    if matches!(vk, 0x21..=0x28 | 0x2D | 0x2E) {
+    if is_extended(vk) {
         flags |= KEYEVENTF_EXTENDEDKEY;
     }
     // SAFETY: `input` is a fully initialised INPUT of type INPUT_KEYBOARD, and

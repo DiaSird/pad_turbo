@@ -2421,11 +2421,54 @@ version = "0.1.0"
 dependencies = [
  "eframe",
  "gilrs",
+ "pad_turbo_engine",
+ "pad_turbo_i18n",
+ "pad_turbo_input",
+ "pad_turbo_output",
  "serde",
  "serde_json",
+ "winres",
+]
+
+[[package]]
+name = "pad_turbo_engine"
+version = "0.1.0"
+dependencies = [
+ "gilrs",
+ "pad_turbo_i18n",
+ "pad_turbo_input",
+ "pad_turbo_output",
+ "serde",
+ "serde_json",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "pad_turbo_i18n"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "pad_turbo_input"
+version = "0.1.0"
+dependencies = [
+ "gilrs",
+ "serde",
+ "serde_json",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "pad_turbo_output"
+version = "0.1.0"
+dependencies = [
+ "pad_turbo_i18n",
+ "pad_turbo_input",
  "vigem-client",
  "windows-sys 0.61.2",
- "winres",
 ]
 
 [[package]]

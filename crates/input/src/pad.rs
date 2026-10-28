@@ -139,7 +139,7 @@ impl PadState {
     ///
     /// Analog inputs are converted with [`TRIGGER_THRESHOLD`] and
     /// [`STICK_THRESHOLD`].
-    pub fn mask(&self) -> u32 {
+    pub const fn mask(&self) -> u32 {
         let t = STICK_THRESHOLD;
         let mut m = self.buttons as u32;
         if self.lt > TRIGGER_THRESHOLD {
@@ -185,9 +185,13 @@ impl PadState {
     /// let s = PadState::default().with_mask(0x1000 | LT, true);
     /// assert_eq!((s.buttons, s.lt), (0x1000, 255));
     /// ```
-    pub fn with_mask(mut self, mask: u32, on: bool) -> Self {
+    pub const fn with_mask(mut self, mask: u32, on: bool) -> Self {
         let b = (mask & 0xFFFF) as u16;
-        self.buttons = if on { self.buttons | b } else { self.buttons & !b };
+        self.buttons = if on {
+            self.buttons | b
+        } else {
+            self.buttons & !b
+        };
         if mask & LT != 0 {
             self.lt = if on { 255 } else { 0 };
         }
@@ -200,8 +204,16 @@ impl PadState {
 
 /// Formats the [`BUTTONS`] contained in `mask` as `"A+B+LT"`, or `"-"` if none.
 pub fn format_mask(mask: u32) -> String {
-    let names: Vec<&str> = BUTTONS.iter().filter(|(_, b)| mask & b != 0).map(|(n, _)| *n).collect();
-    if names.is_empty() { "-".into() } else { names.join("+") }
+    let names: Vec<&str> = BUTTONS
+        .iter()
+        .filter(|(_, b)| mask & b != 0)
+        .map(|(n, _)| *n)
+        .collect();
+    if names.is_empty() {
+        "-".into()
+    } else {
+        names.join("+")
+    }
 }
 
 /// Owner of the gilrs context; reads the connected gamepads.
@@ -221,7 +233,9 @@ impl Pads {
     ///
     /// Returns gilrs' error text if the input backend cannot be initialized.
     pub fn new() -> Result<Self, String> {
-        Gilrs::new().map(|gilrs| Self { gilrs }).map_err(|e| e.to_string())
+        Gilrs::new()
+            .map(|gilrs| Self { gilrs })
+            .map_err(|e| e.to_string())
     }
 
     /// Drains pending events so that the cached gamepad state is current.
@@ -241,7 +255,10 @@ impl Pads {
     /// Resolves the numeric index shown in the GUI back to a connected
     /// [`GamepadId`]. Returns `None` if that gamepad is not connected.
     pub fn find(&self, index: usize) -> Option<GamepadId> {
-        self.gilrs.gamepads().map(|(id, _)| id).find(|&id| usize::from(id) == index)
+        self.gilrs
+            .gamepads()
+            .map(|(id, _)| id)
+            .find(|&id| usize::from(id) == index)
     }
 
     /// Waits until a gamepad that is not in `before` appears, up to `timeout`.
@@ -269,14 +286,15 @@ impl Pads {
     /// is not connected.
     pub fn state(&self, id: GamepadId) -> Option<PadState> {
         let g = self.gilrs.connected_gamepad(id)?;
-        let mut buttons = 0u16;
+        let mut buttons = 0_u16;
         for (btn, bit) in BUTTON_MAP {
             if g.is_pressed(btn) {
                 buttons |= bit;
             }
         }
         let trigger = |btn| {
-            g.button_data(btn).map(|d| (d.value().clamp(0.0, 1.0) * 255.0).round() as u8).unwrap_or(0)
+            g.button_data(btn)
+                .map_or(0, |d| (d.value().clamp(0.0, 1.0) * 255.0).round() as u8)
         };
         let axis = |a| (g.value(a).clamp(-1.0, 1.0) * 32767.0) as i16;
         Some(PadState {
@@ -293,6 +311,8 @@ impl Pads {
     /// Display name and power status of gamepad `id`, or `None` if it is not
     /// connected.
     pub fn info(&self, id: GamepadId) -> Option<(String, PowerInfo)> {
-        self.gilrs.connected_gamepad(id).map(|g| (g.name().to_string(), g.power_info()))
+        self.gilrs
+            .connected_gamepad(id)
+            .map(|g| (g.name().to_string(), g.power_info()))
     }
 }

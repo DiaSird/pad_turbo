@@ -1,0 +1,15 @@
+[package]
+name = "pad_turbo_input"
+description = "PadTurbo: controller input, button model and the start/stop toggle"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+gilrs.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+windows-sys = { workspace = true, features = ["Win32_UI_Input_KeyboardAndMouse"] }
+
+[lints]
+workspace = true

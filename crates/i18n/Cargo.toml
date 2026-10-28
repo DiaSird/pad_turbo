@@ -1,0 +1,13 @@
+[package]
+name = "pad_turbo_i18n"
+description = "PadTurbo: JSON translation tables (English / Japanese)"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true
