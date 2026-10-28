@@ -51,6 +51,24 @@ pub(super) fn capturable_keys() -> impl Iterator<Item = u8> {
     letters_digits.chain(function).chain(numpad).chain(named)
 }
 
+/// Virtual-key code of a key name as written in bindings (`"Space"`, `"F5"`,
+/// `"Q"`, ...), ignoring case and surrounding spaces.
+pub fn key_code(name: &str) -> Option<u8> {
+    vk_from_name(&name.trim().to_ascii_uppercase())
+}
+
+/// Name of virtual key `vk` as written in bindings, or `None` if the key has
+/// no name (see [`keys`]).
+pub fn key_name(vk: u8) -> Option<String> {
+    vk_name(vk)
+}
+
+/// Every key that has a name: letters, digits, `F1`–`F24`, `Num0`–`Num9` and
+/// the named keys, in that order.
+pub fn keys() -> impl Iterator<Item = u8> {
+    capturable_keys()
+}
+
 /// Whether virtual key `vk` is currently down.
 pub(super) fn key_down(vk: u8) -> bool {
     // SAFETY: GetAsyncKeyState has no preconditions.
@@ -129,6 +147,15 @@ pub(super) fn vk_from_name(name: &str) -> Option<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn public_names_ignore_case_and_spaces() {
+        assert_eq!(key_code(" space "), Some(0x20));
+        assert_eq!(key_code("shift"), Some(0x10));
+        assert_eq!(key_code("f"), Some(b'F'));
+        assert_eq!(key_code("Nope"), None);
+        assert_eq!(key_name(0x0D).as_deref(), Some("Enter"));
+    }
 
     #[test]
     fn every_capturable_key_round_trips() {

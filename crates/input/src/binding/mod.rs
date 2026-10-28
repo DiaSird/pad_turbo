@@ -44,6 +44,9 @@
 //! | `config`  | reading and writing `config.json`                        |
 //! | `spec`    | the [`Binding`] value: parsing, labels, "is it held?"    |
 //! | `names`   | key and button names, keyboard state                     |
+//!
+//! The key names are also used by the keyboard output's key table, through
+//! [`key_code`], [`key_name`] and [`keys`].
 //! | `detect`  | turning keyboard/controller samples into events          |
 
 mod config;
@@ -53,6 +56,7 @@ mod spec;
 
 pub use config::Config;
 pub use detect::{Capture, Toggle};
+pub use names::{key_code, key_name, keys};
 pub use spec::Binding;
 
 /// Binding used when `config.json` is missing or invalid.

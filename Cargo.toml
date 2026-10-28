@@ -39,9 +39,13 @@ output.workspace = true
 workspace = true
 
 [profile.release]
-opt-level = 3
+# Set this to 1 or 2 to get more useful backtraces in debugger.
+debug = 0
+
+# Used by the release workflow.
+[profile.release-lto]
+inherits = "release"
 lto = true
-strip = true
 codegen-units = 1
 
 [build-dependencies]

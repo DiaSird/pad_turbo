@@ -5,7 +5,7 @@ use crate::shared::Shared;
 use gilrs::GamepadId;
 use i18n::Message;
 use input::pad::{PadState, Pads};
-use output::Output;
+use output::{KeyMap, Output};
 use std::time::Duration;
 
 /// How long to wait for the virtual controller to appear as an input device.
@@ -24,9 +24,10 @@ pub(super) struct Device {
 }
 
 impl Device {
-    /// Creates the output for `pref`, falling back to the keyboard if ViGEm is
-    /// unavailable. Returns the device and a status message for the GUI.
-    pub(super) fn open(pref: OutputPref, pads: &mut Pads) -> (Self, Message) {
+    /// Creates the output for `pref`, falling back to the keyboard (with
+    /// `keymap`) if ViGEm is unavailable. Returns the device and a status
+    /// message for the GUI.
+    pub(super) fn open(pref: OutputPref, pads: &mut Pads, keymap: &KeyMap) -> (Self, Message) {
         pads.pump();
         let before = pads.ids();
         let (output, status, virtual_id) = match pref {
@@ -36,12 +37,16 @@ impl Device {
                     (o, Message::new("output.status.vigem"), vid)
                 }
                 Err(e) => (
-                    Output::keyboard(),
+                    Output::keyboard(keymap.clone()),
                     Message::new("output.status.fallback").msg("detail", e),
                     None,
                 ),
             },
-            OutputPref::Keyboard => (Output::keyboard(), Message::new("output.status.keyboard"), None),
+            OutputPref::Keyboard => (
+                Output::keyboard(keymap.clone()),
+                Message::new("output.status.keyboard"),
+                None,
+            ),
         };
         let device = Self { output, pref, virtual_id, last_sent: None };
         (device, status)
@@ -62,9 +67,19 @@ impl Device {
         self.output.is_vigem()
     }
 
+    /// Applies the keyboard settings that can change while the device is open:
+    /// the key table and the destination (see [`Device::sync_target`]).
+    pub(super) fn sync(&mut self, sh: &mut Shared) {
+        if self.output.keymap().is_some_and(|k| *k != sh.settings.keymap) {
+            self.output.set_keymap(&sh.settings.keymap);
+            self.last_sent = None;
+        }
+        self.sync_target(sh);
+    }
+
     /// Points the keyboard output at the process chosen in the settings (or
     /// back at the focused window) and publishes the target status.
-    pub(super) fn sync_target(&mut self, sh: &mut Shared) {
+    fn sync_target(&mut self, sh: &mut Shared) {
         let spec = if self.is_vigem() { None } else { sh.settings.target_spec() };
         if self.output.target_spec() != spec {
             self.output.set_target(spec);

@@ -40,6 +40,11 @@
   "output.driver_hint": "ViGEmBus ドライバが必要: https://github.com/nefarius/ViGEmBus/releases",
   "output.passthrough_hint": "物理コントローラーの入力は仮想コントローラーへ転送されます。ゲームが両方を認識する場合は HidHide で物理側を隠してください。",
   "output.keymap": "キー割り当て",
+  "keymap.preset": "プリセット:",
+  "keymap.standard": "標準",
+  "keymap.yakumo": "Yakumo (MHP3rd 既定のキー)",
+  "keymap.none": "(なし)",
+  "keymap.hint": "各入力で押すキーを、ゲーム側のキーボード設定に合わせて選んでください。キーなしの入力は送信しません。同じキーを複数の入力に割り当てた場合、どれか 1 つでも押している間はキーを押し続けます。Yakumo プリセットでは △ がマウス操作のため Y は未割り当てです。",
 
   "target.label": "送信先:",
   "target.foreground": "操作中のウィンドウ",

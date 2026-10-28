@@ -2467,6 +2467,7 @@ version = "0.1.0"
 dependencies = [
  "pad_turbo_i18n",
  "pad_turbo_input",
+ "serde",
  "vigem-client",
  "windows-sys 0.61.2",
 ]

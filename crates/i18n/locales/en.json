@@ -40,6 +40,11 @@
   "output.driver_hint": "The ViGEmBus driver is required: https://github.com/nefarius/ViGEmBus/releases",
   "output.passthrough_hint": "Input from the physical controller is forwarded to the virtual one. If the game sees both, hide the physical controller with HidHide.",
   "output.keymap": "Key mapping",
+  "keymap.preset": "Preset:",
+  "keymap.standard": "Standard",
+  "keymap.yakumo": "Yakumo (MHP3rd default keys)",
+  "keymap.none": "(none)",
+  "keymap.hint": "Choose the key each controller input presses, matching the game's keyboard settings. Inputs without a key are not sent; inputs sharing a key hold it while any of them is held. The Yakumo preset leaves Y unassigned because Yakumo's △ is on the mouse.",
 
   "target.label": "Send keys to:",
   "target.foreground": "Active window",

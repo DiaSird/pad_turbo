@@ -13,6 +13,7 @@
 
 mod controller;
 mod feature;
+mod keymap_editor;
 mod output_device;
 mod run;
 mod target_picker;

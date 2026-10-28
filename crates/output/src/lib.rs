@@ -10,60 +10,33 @@
 //!   driver itself must be installed.
 //! * [`Output::Keyboard`] — injects key presses with `SendInput`, using
 //!   hardware scan codes so that DirectInput/raw-input games also accept them.
-//!   The mapping is fixed in [`KEYMAP`]. Keys go to the focused window, or,
+//!   Which key each controller input presses is the user's [`KeyMap`] (see
+//!   [`keymap`]). Keys go to the focused window, or,
 //!   when a target executable is set, are posted to that program's windows
 //!   so it can be driven in the background (see [`target`]).
 
+pub mod keymap;
 pub mod target;
 
+pub use keymap::{CONTROLS, KeyMap, KeyPreset};
+
 use i18n::Message;
-use input::pad::{self, PadState};
+use input::pad::PadState;
 use target::WindowTarget;
 use vigem_client::{Client, TargetId, XButtons, XGamepad, Xbox360Wired};
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::*;
-
-/// Keyboard output mapping: `(logical bit, virtual-key code, control id, key label)`.
-///
-/// The control id is shown in the GUI; ids that have a `control.<id>` entry in
-/// the translation files (stick and D-pad directions) are translated, the
-/// others (A, B, LB, ...) are shown as-is. The key label is the name of the
-/// keyboard key and is not translated.
-pub const KEYMAP: [(u32, u16, &str, &str); 24] = [
-    (0x1000, 0x5A, "A", "Z"),
-    (0x2000, 0x58, "B", "X"),
-    (0x4000, 0x43, "X", "C"),
-    (0x8000, 0x56, "Y", "V"),
-    (0x0100, 0x51, "LB", "Q"),
-    (0x0200, 0x45, "RB", "E"),
-    (pad::LT, 0x31, "LT", "1"),
-    (pad::RT, 0x33, "RT", "3"),
-    (0x0010, 0x0D, "START", "Enter"),
-    (0x0020, 0x08, "SELECT", "BackSpace"),
-    (0x0040, 0x46, "LS", "F"),
-    (0x0080, 0x47, "RS", "G"),
-    (0x0001, 0x26, "UP", "↑"),
-    (0x0002, 0x28, "DOWN", "↓"),
-    (0x0004, 0x25, "LEFT", "←"),
-    (0x0008, 0x27, "RIGHT", "→"),
-    (pad::LS_UP, 0x57, "LS_UP", "W"),
-    (pad::LS_DOWN, 0x53, "LS_DOWN", "S"),
-    (pad::LS_LEFT, 0x41, "LS_LEFT", "A"),
-    (pad::LS_RIGHT, 0x44, "LS_RIGHT", "D"),
-    (pad::RS_UP, 0x49, "RS_UP", "I"),
-    (pad::RS_DOWN, 0x4B, "RS_DOWN", "K"),
-    (pad::RS_LEFT, 0x4A, "RS_LEFT", "J"),
-    (pad::RS_RIGHT, 0x4C, "RS_RIGHT", "L"),
-];
 
 /// Where generated input is delivered.
 pub enum Output {
     /// Virtual Xbox 360 controller plugged into ViGEmBus.
     ViGEm(Xbox360Wired<Client>),
-    /// Keyboard injection. `held` is the logical mask whose keys are currently
-    /// held down, used to send only the key transitions that changed.
+    /// Keyboard injection through a [`KeyMap`].
     Keyboard {
-        /// Logical bits whose keys are currently pressed.
-        held: u32,
+        /// Keys currently held down, sorted, to send only the transitions
+        /// that changed.
+        held: Vec<u8>,
+        /// Which key each controller input presses.
+        keymap: KeyMap,
         /// Program the keys are posted to; `None` sends to the focused window.
         target: Option<WindowTarget>,
     },
@@ -89,10 +62,11 @@ impl Output {
         Ok(Self::ViGEm(target))
     }
 
-    /// Creates a keyboard output with no keys held.
-    pub const fn keyboard() -> Self {
+    /// Creates a keyboard output using `keymap`, with no keys held.
+    pub const fn keyboard(keymap: KeyMap) -> Self {
         Self::Keyboard {
-            held: 0,
+            held: Vec::new(),
+            keymap,
             target: None,
         }
     }
@@ -125,6 +99,27 @@ impl Output {
         }
     }
 
+    /// The key table of the keyboard output; `None` for the virtual
+    /// controller.
+    pub const fn keymap(&self) -> Option<&KeyMap> {
+        match self {
+            Self::Keyboard { keymap, .. } => Some(keymap),
+            Self::ViGEm(_) => None,
+        }
+    }
+
+    /// Replaces the key table of the keyboard output. Keys held under the old
+    /// table are released first. Does nothing for the virtual controller.
+    pub fn set_keymap(&mut self, new: &KeyMap) {
+        if self.is_vigem() {
+            return;
+        }
+        self.send(&PadState::default());
+        if let Self::Keyboard { keymap, .. } = self {
+            keymap.clone_from(new);
+        }
+    }
+
     /// Redirects keyboard output to the windows of `spec` (executable name and
     /// optional process id), or back to the focused window with `None`. Keys
     /// held on the old destination are released first. Does nothing for the
@@ -142,8 +137,9 @@ impl Output {
     /// Delivers `s` to the device.
     ///
     /// For ViGEm the whole report is submitted. For the keyboard, `s` is
-    /// collapsed with [`PadState::mask`] and only keys whose state changed
-    /// since the previous call are pressed or released. Errors from the
+    /// collapsed with [`PadState::mask`], turned into keys with the
+    /// [`KeyMap`], and only keys whose state changed since the previous call
+    /// are pressed or released. Errors from the
     /// driver are ignored: a dropped report is corrected by the next tick.
     pub fn send(&mut self, s: &PadState) {
         match self {
@@ -158,19 +154,15 @@ impl Output {
                     thumb_ry: s.ry,
                 });
             }
-            Self::Keyboard { held, target } => {
-                let m = s.mask();
-                let diff = m ^ *held;
-                for &(bit, vk, _, _) in KEYMAP.iter() {
-                    if diff & bit != 0 {
-                        let down = m & bit != 0;
-                        match target {
-                            Some(t) => t.post_key(vk, down, is_extended(vk)),
-                            None => send_key(vk, down),
-                        }
-                    }
+            Self::Keyboard { held, keymap, target } => {
+                let want = keymap.pressed(s.mask());
+                for &vk in held.iter().filter(|vk| !want.contains(vk)) {
+                    deliver(target.as_mut(), vk, false);
                 }
-                *held = m;
+                for &vk in want.iter().filter(|vk| !held.contains(vk)) {
+                    deliver(target.as_mut(), vk, true);
+                }
+                *held = want;
             }
         }
     }
@@ -184,6 +176,15 @@ impl Output {
         if let Self::ViGEm(mut target) = self {
             let _ = target.unplug();
         }
+    }
+}
+
+/// Presses or releases `vk` on `target`, or on the focused window without one.
+fn deliver(target: Option<&mut WindowTarget>, vk: u8, down: bool) {
+    let vk = u16::from(vk);
+    match target {
+        Some(t) => t.post_key(vk, down, is_extended(vk)),
+        None => send_key(vk, down),
     }
 }
 

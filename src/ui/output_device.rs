@@ -1,5 +1,6 @@
 //! The output section: device choice, its status and the keyboard mapping.
 
+use super::keymap_editor;
 use super::target_picker::{self, TargetPicker};
 use super::{GREEN, RED};
 use eframe::egui::{self, RichText};
@@ -37,19 +38,6 @@ pub(super) fn show(ui: &mut egui::Ui, sh: &mut Shared, tr: Tr, picker: &mut Targ
     } else {
         ui.add_space(4.0);
         target_picker::show(ui, sh, tr, picker);
-        egui::CollapsingHeader::new(tr.t("output.keymap")).show(ui, |ui| {
-            egui::Grid::new("keymap")
-                .num_columns(4)
-                .striped(true)
-                .show(ui, |ui| {
-                    for (i, (_, _, control, key)) in output::KEYMAP.iter().enumerate() {
-                        ui.label(tr.get(&format!("control.{control}")).unwrap_or(control));
-                        ui.label(RichText::new(*key).strong());
-                        if i % 2 == 1 {
-                            ui.end_row();
-                        }
-                    }
-                });
-        });
+        egui::CollapsingHeader::new(tr.t("output.keymap")).show(ui, |ui| keymap_editor::show(ui, sh, tr));
     }
 }

@@ -97,7 +97,7 @@ impl Worker {
     fn tick(&mut self, shared: &Mutex<Shared>) -> bool {
         let now = Instant::now();
         self.ensure_device(shared);
-        self.device.sync_target(&mut lock(shared));
+        self.device.sync(&mut lock(shared));
         let mut sample = self.inputs.sample(shared, self.device.virtual_id(), now);
 
         let mut guard = lock(shared);
@@ -154,7 +154,8 @@ impl Worker {
 
 /// Creates the output for `pref` and reports its status to the GUI.
 fn open_device(shared: &Mutex<Shared>, pads: &mut Pads, pref: OutputPref) -> Device {
-    let (device, status) = Device::open(pref, pads);
+    let keymap = lock(shared).settings.keymap.clone();
+    let (device, status) = Device::open(pref, pads, &keymap);
     let mut sh = lock(shared);
     sh.output_is_vigem = device.is_vigem();
     sh.log(status.clone());

@@ -40,7 +40,7 @@
 //! | file            | written by | content                                     |
 //! |-----------------|------------|---------------------------------------------|
 //! | `config.json`   | user / GUI | toggle binding (created on first launch)    |
-//! | `settings.json` | GUI        | language, feature, turbo, output and target |
+//! | `settings.json` | GUI        | language, feature, turbo, output, key table, target |
 //! | `macro.json`    | worker     | last recorded macro                         |
 //! | `i18n/*.json`   | user       | optional translation overrides              |
 //!

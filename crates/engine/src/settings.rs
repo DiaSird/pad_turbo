@@ -80,6 +80,8 @@ pub struct Settings {
     pub target: TargetMode,
     /// Executable file name used with [`TargetMode::Process`].
     pub target_exe: String,
+    /// Which key each controller input presses with the keyboard output.
+    pub keymap: output::KeyMap,
     /// Specific process of [`Settings::target_exe`] chosen in the GUI.
     /// Not persisted: process ids do not survive a restart, so after one every
     /// process with that executable name is targeted.
@@ -99,6 +101,7 @@ impl Default for Settings {
             countdown: true,
             target: TargetMode::Foreground,
             target_exe: String::new(),
+            keymap: output::KeyMap::default(),
             target_pid: None,
         }
     }
@@ -121,4 +124,26 @@ impl Settings {
 /// at fast rates.
 pub fn press_ms(interval_ms: u32) -> u32 {
     (interval_ms / 2).clamp(10, 100)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use output::{KeyMap, KeyPreset};
+
+    #[test]
+    fn keymap_survives_settings_json() {
+        let mut s = Settings { keymap: KeyMap::preset(KeyPreset::Yakumo), ..Settings::default() };
+        s.keymap.set(3, Some(b'T'));
+        let json = serde_json::to_string_pretty(&s).unwrap();
+        assert!(json.contains("\"A\": \"Space\""), "{json}");
+        let back: Settings = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.keymap, s.keymap);
+    }
+
+    #[test]
+    fn settings_without_keymap_use_the_standard_table() {
+        let s: Settings = serde_json::from_str(r#"{ "output": "Keyboard" }"#).unwrap();
+        assert!(s.keymap.is_preset(KeyPreset::Standard));
+    }
 }
